@@ -1,0 +1,1025 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Corrents marins 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Concepte: un volum de mar en 3D com a escenari; a sota, la barra de turbines per arrossegar; després energia, ajustos i dades de la turbina escollida. Blau = aigua, ambre = electricitat, corall = pèrdues. */
+:root{
+  --f-head:"Barlow Semi Condensed","Arial Narrow",sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --bg:#edf2f3; --surface:#f9fbfb; --ink:#10272f; --ink-2:#4b6670; --line:#cddcdf;
+  --stage:#cfe3ea; --sea:#2f8cb0; --sea-deep:#1c607d; --mech:#6d8791; --slate:#8fa6af;
+  --amber:#e9a417; --amber-line:#c98a0a; --on-amber:#10272f; --loss:#c9472f; --ok:#2f8a63;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1a20; --surface:#112730; --ink:#e3eef1; --ink-2:#93aeb7; --line:#234652;
+    --stage:#0a2430; --sea:#3ea6cc; --sea-deep:#1f6d8c; --mech:#8aa2ab; --slate:#587480;
+    --amber:#f3b73a; --amber-line:#f3b73a; --on-amber:#10272f; --loss:#f08a72; --ok:#5fcf9c; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1a20; --surface:#112730; --ink:#e3eef1; --ink-2:#93aeb7; --line:#234652;
+  --stage:#0a2430; --sea:#3ea6cc; --sea-deep:#1f6d8c; --mech:#8aa2ab; --slate:#587480;
+  --amber:#f3b73a; --amber-line:#f3b73a; --on-amber:#10272f; --loss:#f08a72; --ok:#5fcf9c; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--f-body);padding-block:24px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));-webkit-text-size-adjust:100%}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:22px}
+h1,h2,h3{font-family:var(--f-head);margin:0;text-wrap:balance}
+h1{font-weight:700;font-size:clamp(28px,4.4vw,42px);line-height:1.05;letter-spacing:-.01em}
+h2{font-weight:600;font-size:20px;line-height:1.2}
+.lead{margin:8px 0 0;max-width:68ch;color:var(--ink-2)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.desc{margin:6px 0 0;font-size:13px;color:var(--ink-2)}
+:focus-visible{outline:2px solid var(--sea-deep);outline-offset:2px}
+.lbl{font:600 11px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.v{font:500 20px/1.2 var(--f-mono);font-variant-numeric:tabular-nums}
+.v small{font-size:12px;color:var(--ink-2);margin-left:3px}
+.ro{display:grid;gap:0;min-width:84px}
+
+/* Escenario 3D */
+.stagebox{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.viewport{position:relative;height:clamp(400px,64vh,660px);background:var(--stage)}
+#gl{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#gl.grabbing{cursor:grabbing}
+.vp-top{position:absolute;left:12px;top:12px;display:flex;flex-wrap:wrap;gap:8px;max-width:calc(100% - 24px);pointer-events:none}
+.tag{pointer-events:none;font:600 13px var(--f-head);padding:6px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.tag b{font:500 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.tag.amber{background:var(--amber);color:var(--on-amber);border-color:var(--amber)}
+.vp-msg{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);max-width:calc(100% - 24px);text-align:center;font:600 13px var(--f-head);padding:7px 12px;border-radius:8px;background:var(--ink);color:var(--surface);opacity:0;transition:opacity .25s;pointer-events:none}
+.vp-msg.on{opacity:1}
+.vp-err{position:absolute;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:var(--ink);font:500 15px var(--f-body)}
+.vp-err.on{display:grid}
+.sel-label{position:absolute;left:0;top:0;transform:translate(-50%,-100%);pointer-events:none;font:600 12px var(--f-head);padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--surface);white-space:nowrap;display:none}
+.ghost{position:fixed;left:0;top:0;width:92px;height:70px;margin:-35px 0 0 -46px;pointer-events:none;z-index:50;display:none;border-radius:8px;background:var(--surface);border:2px solid var(--amber-line);box-shadow:0 6px 18px rgba(0,0,0,.28);overflow:hidden}
+.ghost img{width:100%;height:100%;object-fit:contain;display:block}
+.ghost.on{display:block}
+
+/* Barra de turbinas */
+.dockbar{border-top:1px solid var(--line);padding:12px 14px 14px;display:grid;gap:8px}
+.dock-h{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;justify-content:space-between}
+.dock-h h2{font-size:16px}
+.dock-h span{font-size:12.5px;color:var(--ink-2)}
+.dock{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.card{flex:none;width:158px;text-align:left;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px;display:grid;align-content:start;gap:5px;cursor:grab;touch-action:pan-x;user-select:none;-webkit-user-select:none;font:inherit}
+.card:hover{border-color:var(--ink-2)}
+.card:active{cursor:grabbing}
+.card .th{height:74px;border-radius:6px;background:var(--stage);display:grid;place-items:center;overflow:hidden}
+.card .th img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;-webkit-user-drag:none}
+.card .th span{font:600 12px var(--f-head);color:var(--ink-2)}
+.card b{font:600 14px/1.15 var(--f-head)}
+.card small{font-size:11.5px;line-height:1.3;color:var(--ink-2)}
+.card .kw{font:500 11.5px var(--f-mono);color:var(--ink)}
+
+/* Paneles inferiores */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,380px);gap:22px;align-items:start}
+@media(max-width:940px){.lower{grid-template-columns:minmax(0,1fr)}}
+.egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:22px;margin-top:14px;align-items:start}
+.bars{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.col{display:grid;gap:4px;justify-items:center;min-width:0}
+.track{position:relative;width:100%;max-width:46px;height:200px;display:flex;flex-direction:column-reverse;background:var(--line);border-radius:6px;overflow:hidden}
+.track i{display:block;width:100%;height:0;transition:height .2s linear}
+.c0 i{background:var(--sea)} .c1 i{background:var(--sea-deep)} .c2 i{background:var(--mech)} .c3 i{background:var(--amber)} .c4 i{background:var(--loss)}
+.c5 i.u{background:var(--amber)} .c5 i.l{background:var(--loss)}
+.col .num{font:500 11.5px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.col .nm{font:600 12px var(--f-head);color:var(--ink-2);text-align:center}
+.unit{margin:10px 0 0;font-size:12px;color:var(--ink-2)}
+#pie{display:block;width:150px;max-width:100%;height:auto;margin:0 auto}
+.pie-bg{fill:var(--line)}
+#pie .q0,.sq.q0{fill:var(--amber);background:var(--amber)}
+#pie .q1,.sq.q1{fill:var(--slate);background:var(--slate)}
+#pie .q2,.sq.q2{fill:var(--loss);background:var(--loss)}
+#pie .q3,.sq.q3{fill:var(--loss);background:var(--loss);opacity:.55}
+#pie path{stroke:var(--surface);stroke-width:1}
+.pleg{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:5px;font-size:13px}
+.pleg li{display:flex;align-items:center;gap:8px}
+.pleg b{margin-left:auto;font:500 12px var(--f-mono);font-variant-numeric:tabular-nums}
+.sq{flex:none;width:12px;height:12px;border-radius:3px;display:inline-block}
+.checks{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font:600 14px var(--f-head)}
+.checks label{display:flex;gap:7px;align-items:center;cursor:pointer}
+.checks input{accent-color:var(--sea-deep);width:16px;height:16px;margin:0}
+
+.grp{display:grid;gap:10px;margin-top:16px}
+.grp h3{font:600 12px var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 10px}
+.row label{font-size:14px}
+.row output{font:500 13px var(--f-mono);font-variant-numeric:tabular-nums}
+.row input{grid-column:1/-1;width:100%;margin:2px 0 0;accent-color:var(--sea-deep)}
+.chips,.btns{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:600 13px var(--f-head);padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--ink-2)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.danger{color:var(--loss)}
+
+/* Turbina elegida */
+.tlist{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.tlist li button{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);font:inherit;cursor:pointer}
+.tlist li button[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tlist .n{font:600 14px var(--f-head);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tlist .p{font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+.tlist .b{grid-column:1/-1;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.tlist .b i{display:block;height:100%;background:var(--amber)}
+.empty{margin:10px 0 0;font-size:13px;color:var(--ink-2)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:12px 0 0;font-size:13.5px}
+.facts dt{color:var(--ink-2)} .facts dd{margin:0;font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+#curve{display:block;width:100%;height:190px}
+details{font-size:13px;color:var(--ink-2)}
+details summary{cursor:pointer;font:600 14px var(--f-head);color:var(--ink)}
+details ul{margin:8px 0 0;padding-left:18px;display:grid;gap:4px;max-width:84ch}
+@media(prefers-reduced-motion:reduce){.track i,.vp-msg,.eov-btn svg{transition:none}}
+
+/* Panel de energía sobre el visor */
+.energy-ov{position:absolute;right:12px;top:12px;width:min(540px,calc(100% - 24px));max-height:calc(100% - 24px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 22px rgba(0,0,0,.2);overflow:hidden}
+.eov-h{display:flex;align-items:center;gap:10px;padding:7px 8px 7px 14px}
+.eov-h h2{font-size:16px;flex:none}
+.eov-h .tot{margin-left:auto;font:500 13px var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.eov-btn{flex:none;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 9px 0 11px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:600 13px var(--f-head);cursor:pointer}
+.eov-btn:hover{border-color:var(--ink-2)}
+.eov-btn svg{width:15px;height:15px;transition:transform .2s}
+.energy-ov.min .eov-btn svg{transform:rotate(180deg)}
+.eov-body{padding:0 14px 12px;overflow:auto;border-top:1px solid var(--line)}
+.energy-ov .desc{font-size:12px;margin:8px 0 0}
+.energy-ov .egrid{grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:14px;margin-top:10px}
+.energy-ov .bars{gap:5px}
+.energy-ov .track{height:96px}
+.energy-ov .col .num{font-size:11px}
+.energy-ov .col .nm{font-size:10px;line-height:1.1;max-width:100%;overflow-wrap:anywhere}
+.energy-ov .unit{font-size:11px;margin-top:6px}
+.energy-ov #pie{width:104px}
+.energy-ov .pleg{font-size:12px;gap:3px;margin-top:8px}
+.pleg b{flex:none;white-space:nowrap}
+.energy-ov .checks{margin-top:10px;padding-top:10px;font-size:13px}
+@media(max-width:700px){
+  .energy-ov{top:52px;left:12px;right:12px;width:auto;max-height:calc(100% - 64px)}
+  .energy-ov .egrid{grid-template-columns:minmax(0,1fr)}
+}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0 24px}
+.selgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 24px;align-items:start}
+@media(max-width:760px){.selgrid{grid-template-columns:minmax(0,1fr)}}
+</style>
+<main class="wrap">
+<header>
+  <h1>Parc de corrents marins</h1>
+</header>
+
+<section class="stagebox" aria-label="Escena 3D del fons marí">
+  <div class="viewport" id="viewport">
+    <canvas id="gl" aria-label="Escena 3D: fons marí amb turbines de corrent. Gira amb el ratolí o amb el dit, apropa amb la roda."></canvas>
+    <div class="vp-top">
+      <span class="tag amber" id="tagFlow">Corrent <b>0,0 m/s</b></span>
+      <span class="tag" id="tagDir">Sentit: →</span>
+    </div>
+    <div class="energy-ov" id="energy">
+      <div class="eov-h">
+        <h2>Energia</h2>
+        <span class="tot" id="ovTotal">A la xarxa · 0 W</span>
+        <button type="button" class="eov-btn" id="btnMin" aria-expanded="true" aria-controls="enBody" aria-label="Minimitza el panell d’energia"><span class="t">Minimitza</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10l5-5 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <div class="eov-body" id="enBody">
+        <p class="desc">Potència de totes les turbines juntes, ara mateix. El que no arriba a la xarxa es perd o es queda al corrent.</p>
+        <div class="egrid">
+          <div id="barsBox">
+            <div class="bars" id="bars" role="img" aria-label="Gràfic de barres de la potència en cada forma d’energia">
+              <div class="col c0"><div class="track"><i></i></div><span class="num">0</span><span class="nm">Corrent</span></div>
+              <div class="col c1"><div class="track"><i></i></div><span class="num">0</span><span class="nm">Mecànica</span></div>
+              <div class="col c2"><div class="track"><i></i></div><span class="num">0</span><span class="nm">Elèctrica</span></div>
+              <div class="col c3"><div class="track"><i></i></div><span class="num">0</span><span class="nm">A la xarxa</span></div>
+              <div class="col c4"><div class="track"><i></i></div><span class="num">0</span><span class="nm">Pèrdues</span></div>
+              <div class="col c5"><div class="track"><i class="u"></i><i class="l"></i></div><span class="num">0</span><span class="nm">Total</span></div>
+            </div>
+            <p class="unit" id="barScale">Escala de les barres: de 0 a 1 MW.</p>
+          </div>
+          <div id="pieBox">
+            <svg id="pie" viewBox="0 0 120 120" role="img" aria-label="Gràfic circular del repartiment de l’energia del corrent">
+              <circle cx="60" cy="60" r="50" class="pie-bg"/>
+              <path class="q0"/><path class="q1"/><path class="q2"/><path class="q3"/>
+            </svg>
+            <ul class="pleg" id="pieLeg">
+              <li><i class="sq q0"></i>Electricitat a la xarxa <b class="pv">—</b></li>
+              <li><i class="sq q1"></i>Corrent que no es capta <b class="pv">—</b></li>
+              <li><i class="sq q2"></i>Pèrdues del generador <b class="pv">—</b></li>
+              <li><i class="sq q3"></i>Pèrdues de cable i transformador <b class="pv">—</b></li>
+            </ul>
+          </div>
+        </div>
+        <div class="checks">
+          <label><input type="checkbox" id="cBars" checked> Barres</label>
+          <label><input type="checkbox" id="cPie" checked> Gràfic circular</label>
+        </div>
+      </div>
+    </div>
+    <div class="sel-label" id="selLabel"></div>
+    <div class="vp-msg" id="msg" role="status" aria-live="polite"></div>
+    <div class="vp-err" id="err">No s’ha pogut iniciar el visor 3D. Comprova que el navegador admet WebGL.</div>
+  </div>
+  <div class="dockbar">
+    <div class="dock-h"><h2>Barra de turbines</h2><span>Arrossega un model al fons marí, o prem-lo per col·locar-lo en un forat lliure.</span></div>
+    <div class="dock" id="dock" role="list"></div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="kpis">
+    <div class="ro"><span class="lbl">Potència a la xarxa</span><span class="v" id="kP">0<small>MW</small></span></div>
+    <div class="ro"><span class="lbl">Turbines col·locades</span><span class="v" id="kN">0</span></div>
+    <div class="ro"><span class="lbl">Factor de càrrega ara</span><span class="v" id="kF">—</span></div>
+    <div class="ro"><span class="lbl">Llars abastides</span><span class="v" id="kH">—</span></div>
+  </div>
+</section>
+
+<section class="lower">
+  <div class="panel" id="controls">
+    <h2>Ajustos</h2>
+    <div class="cgrid">
+    <div class="grp">
+      <h3>Corrent</h3>
+      <div class="row"><label for="rFlow">Intensitat del corrent</label><output id="oFlow" for="rFlow"></output>
+        <input type="range" id="rFlow" min="0" max="4.5" step="0.1" value="2.4"></div>
+      <div class="chips">
+        <button type="button" class="btn" data-flow="1.2">Marees mortes</button>
+        <button type="button" class="btn" data-flow="2.4">Mitjanes</button>
+        <button type="button" class="btn" data-flow="3.5">Marees vives</button>
+      </div>
+      <div class="btns"><button type="button" class="btn" id="btnFlip">Inverteix el sentit</button></div>
+    </div>
+    <div class="grp">
+      <h3>Vista</h3>
+      <div class="checks" style="margin:0;padding:0;border:0">
+        <label><input type="checkbox" id="cSurf" checked> Superfície de l’aigua</label>
+        <label><input type="checkbox" id="cWake" checked> Estela</label>
+      </div>
+    </div>
+    <div class="grp">
+      <h3>Turbines</h3>
+      <div class="btns">
+        <button type="button" class="btn danger" id="btnDel" disabled>Treu l’escollida</button>
+        <button type="button" class="btn" id="btnClear">Treu-les totes</button>
+      </div>
+    </div>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>A l’aigua</h2>
+    <ul class="tlist" id="tlist"></ul>
+    <p class="empty" id="tEmpty">Encara no hi ha turbines. Arrossega’n una des de la barra.</p>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Turbina escollida</h2>
+  <div class="selgrid">
+    <div>
+      <p class="desc" id="selDesc">Prem una turbina a l’escena o a la llista per veure’n les dades. També pots arrossegar-la pel fons per moure-la.</p>
+      <dl class="facts" id="facts"></dl>
+    </div>
+    <canvas id="curve" aria-label="Corba de potència de la turbina escollida segons la velocitat del corrent"></canvas>
+  </div>
+</section>
+
+<details class="panel">
+  <summary>Què simplifica aquest model</summary>
+  <ul>
+    <li>Potència del corrent que travessa el rotor: P = ½·ρ·A·v³, amb aigua de mar d’1 025 kg/m³. La turbina capta una fracció (el coeficient de potència, Cp) i per sota de la velocitat d’arrencada no gira.</li>
+    <li>A partir de la velocitat nominal la turbina limita la potència, com fan les reals regulant el pas de les pales o el parell.</li>
+    <li>Generador amb un rendiment del 95 % i cable submarí amb transformador amb un 97 %.</li>
+    <li>Estela amb el model de Jensen: darrere de cada turbina el corrent va més lent i es recupera a poc a poc. Una turbina situada en aquesta estela produeix menys. Els dèficits es combinen en arrel de suma de quadrats.</li>
+    <li>La velocitat indicada és la de l’eix de la turbina. No es simula el perfil de velocitat amb la profunditat, la turbulència ni la inversió periòdica de la marea.</li>
+    <li>El conducte Venturi accelera l’aigua a la gola abans que arribi al rotor. El model la multiplica per 1,4 i calcula la potència amb l’àrea de la gola.</li>
+    <li>La hidroala oscil·lant no gira: l’ala puja i baixa i canvia d’angle a cada cursa. El model calcula la potència amb l’àrea que escombra l’ala (envergadura per recorregut vertical) i un coeficient de potència una mica menor que el d’un rotor.</li>
+    <li>Els 5 models són representacions simplificades dels dispositius de la llista d’<a href="https://www.emec.org.uk/marine-energy/tidal-developers/" target="_blank" rel="noopener">EMEC</a> (n’hi ha 97 en total). Les dimensions, el Cp i les potències són valors d’exemple per al model, no dades oficials dels fabricants. Els dibuixos en 3D són esquemàtics.</li>
+    <li>Consum per llar: 3 500 kWh l’any.</li>
+  </ul>
+</details>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/*SIM-START*/
+const RHO=1025, ETA_G=.95, ETA_C=.97, KWAKE=.06, HOME_KW=3500/8760, VMAX=4.5;
+const BOUND={x:112,z:68}, MIN_DIST=14, MAX_T=14;
+/* Valores de ejemplo para el modelo, no datos oficiales de los fabricantes. */
+const MODELS=[
+ {id:'venturi',name:'Enclosed Tips (Venturi)',dev:'Diversos desenvolupadors',fam:'Punta tancada',
+  info:'Un conducte en forma d’embut accelera l’aigua cap a una turbina petita a la gola, amb les puntes de les pales dins del conducte.',
+  D:9.2,area:66.5,cp:.38,cutIn:.8,vr:3.0,gain:1.4,ct:.8,wakeR:10,tsr:3,axis:'x',hub:13.2},
+ {id:'seagen',name:'Turbina d’eix horitzontal',dev:'Marine Current Turbines',fam:'Eix horitzontal',
+  info:'Dos rotors en una biga transversal que puja per un pilar fins a la superfície.',
+  D:20,area:628.3,cp:.40,cutIn:.8,vr:2.5,gain:1,ct:.75,wakeR:10,tsr:4.2,axis:'x',hub:22},
+ {id:'hydroquest',name:'Turbina d’eix vertical',dev:'HydroQuest',fam:'Eix vertical',
+  info:'Dos rotors verticals de pales rectes que aprofiten el corrent vingui d’on vingui.',
+  D:8,area:224,cp:.35,cutIn:.9,vr:3.0,gain:1,ct:.6,wakeR:10,tsr:2.2,axis:'y',hub:10},
+ {id:'hydrofoil',name:'Hidroala oscil·lant',dev:'Diversos desenvolupadors',fam:'Oscillating Hydrofoil',
+  info:'Una ala submergida puja i baixa amb el corrent i canvia d’angle a cada cursa. Aquest vaivé mou un sistema hidràulic que genera l’electricitat.',
+  D:12,area:288,cp:.34,cutIn:.9,vr:2.6,gain:1,ct:.6,wakeR:12,tsr:1,axis:'x',hub:24},
+ {id:'flumill',name:'Cargol d’Arquimedes',dev:'Flumill',fam:'Cargol d’Arquimedes',
+  info:'Un cargol helicoïdal alineat amb el corrent sobre una torre.',
+  D:8,area:50.3,cp:.30,cutIn:.9,vr:2.6,gain:1,ct:.5,wakeR:4,tsr:1.6,axis:'x',hub:9}
+];
+const MODEL_BY_ID={}; MODELS.forEach(m=>MODEL_BY_ID[m.id]=m);
+const mechRated=m=>.5*RHO*m.area*m.cp*Math.pow(m.gain*m.vr,3);
+const ratedGrid=m=>mechRated(m)*ETA_G*ETA_C;
+const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+
+function turbinePower(m,v){
+  const ve=m.gain*v;
+  const p0=.5*RHO*m.area*ve*ve*ve;
+  const lim=mechRated(m);
+  let p1=p0*m.cp*smooth(m.cutIn,m.cutIn+.4,v), state='run';
+  if(v<m.cutIn){p1=0;state='off';}
+  else if(p1>=lim){p1=lim;state='limited';}
+  const p2=p1*ETA_G, p3=p2*ETA_C;
+  return {p0,p1,p2,p3,state};
+}
+function wakeDeficit(a,b,dir){
+  const dx=(b.x-a.x)*dir;
+  if(dx<=.5) return 0;
+  const R=a.m.wakeR, Rb=b.m.wakeR, rw=R+KWAKE*dx, dz=Math.abs(b.z-a.z);
+  const f=Math.max(0,Math.min(1,(rw+Rb-dz)/(2*Rb)));
+  if(f<=0) return 0;
+  return (1-Math.sqrt(1-a.m.ct))*Math.pow(R/rw,2)*f;
+}
+function evaluate(ts,v,dir){
+  const per=[], tot={p0:0,p1:0,p2:0,p3:0,rated:0};
+  ts.forEach(b=>{
+    let s=0;
+    ts.forEach(a=>{ if(a!==b){const d=wakeDeficit(a,b,dir); s+=d*d;} });
+    const def=Math.min(.9,Math.sqrt(s)), vl=v*(1-def), r=turbinePower(b.m,vl);
+    per.push({p0:r.p0,p1:r.p1,p2:r.p2,p3:r.p3,state:r.state,v:vl,def:def});
+    tot.p0+=r.p0; tot.p1+=r.p1; tot.p2+=r.p2; tot.p3+=r.p3; tot.rated+=ratedGrid(b.m);
+  });
+  return {per:per,tot:tot};
+}
+function tooClose(ts,x,z,skip){
+  return ts.some(t=>t!==skip&&Math.hypot(t.x-x,t.z-z)<MIN_DIST);
+}
+function findSlot(ts){
+  let best=null,bs=-1;
+  for(let x=-BOUND.x+8;x<=BOUND.x-8;x+=8){
+    for(let z=-BOUND.z+8;z<=BOUND.z-8;z+=8){
+      let d=Infinity;
+      ts.forEach(t=>{d=Math.min(d,Math.hypot(t.x-x,t.z-z));});
+      if(d<MIN_DIST) continue;
+      const s=(d===Infinity?200-Math.hypot(x+40,z):d);
+      if(s>bs){bs=s;best={x:x,z:z};}
+    }
+  }
+  return best;
+}
+function fmtP(w,nf){
+  if(w>=1e6) return nf(w/1e6,w>=1e7?1:2)+' MW';
+  if(w>=1e3) return nf(w/1e3,w>=1e5?0:1)+' kW';
+  return nf(w,0)+' W';
+}
+function niceMax(w){
+  if(w<=0) return 1e3;
+  const e=Math.pow(10,Math.floor(Math.log10(w))), f=w/e;
+  return (f<=1?1:f<=2?2:f<=5?5:10)*e;
+}
+/*SIM-END*/
+/*MODELS-START*/
+/* Cada modelo se dibuja con el origen en el fondo marino y la corriente hacia +x. */
+let M=null;
+function ensureMats(){
+  if(M) return M;
+  const std=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m,flatShading:true});
+  M={
+    steel:std(0x8896a0,.5,.5), dark:std(0x3b4a52,.6,.4), conc:std(0x9aa4a0,.9,.05),
+    yellow:std(0xe8b323,.5,.2), orange:std(0xe0592b,.55,.2), white:std(0xeef3f5,.45,.1),
+    blade:new THREE.MeshStandardMaterial({color:0xf2f6f7,roughness:.4,metalness:.1,flatShading:true,side:THREE.DoubleSide}),
+    tether:new THREE.MeshStandardMaterial({color:0x2a3338,roughness:.8,metalness:.1})
+  };
+  return M;
+}
+function mk(geo,mat,x,y,z){const o=new THREE.Mesh(geo,mat);o.position.set(x||0,y||0,z||0);return o;}
+function cylX(r,len,mat,x,y,z,seg){const o=mk(new THREE.CylinderGeometry(r,r,len,seg||18),mat,x,y,z);o.rotation.z=Math.PI/2;return o;}
+function cylY(r,h,mat,x,y,z,seg){return mk(new THREE.CylinderGeometry(r,r,h,seg||18),mat,x,y,z);}
+
+/* Pala cónica con torsión. Se extiende a lo largo de +y; la cuerda va en z y el grosor en x. */
+function bladeGeo(len,rootC,tipC,thick,twist){
+  const g=new THREE.BoxGeometry(1,1,1,1,6,1), p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const t=p.getY(i)+.5, c=rootC+(tipC-rootC)*t, th=thick*(1-.45*t);
+    const tx=p.getX(i)*th, cz=p.getZ(i)*c, a=twist*(1-t);
+    p.setXYZ(i,tx*Math.cos(a)-cz*Math.sin(a),t*len,tx*Math.sin(a)+cz*Math.cos(a));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function rotorHAT(n,R,hubR,rootC,tipC,mat){
+  const g=new THREE.Group(), geo=bladeGeo(R-hubR*.6,rootC,tipC,.5,.5);
+  for(let k=0;k<n;k++){
+    const arm=new THREE.Group(); arm.rotation.x=k*2*Math.PI/n;
+    const b=new THREE.Mesh(geo,mat); b.position.y=hubR*.6; arm.add(b); g.add(arm);
+  }
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(hubR,16,12),M.dark));
+  return g;
+}
+function between(mesh,a,b){
+  const d=new THREE.Vector3().subVectors(b,a), len=d.length();
+  mesh.position.copy(a).addScaledVector(d,.5);
+  mesh.scale.set(1,Math.max(.01,len),1);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+}
+
+function buildTurbine(id){
+  ensureMats();
+  const m=MODEL_BY_ID[id], root=new THREE.Group(), rotors=[];
+  let tick=null, hitR=8, hitH=m.hub+m.D*.6;
+
+  if(id==='venturi'){
+    const h=m.hub;
+    root.add(mk(new THREE.BoxGeometry(28,1.6,20),M.yellow,0,.8,0));
+    root.add(mk(new THREE.BoxGeometry(2.6,h-4.6-1.6,2.6),M.dark,0,1.6+(h-4.6-1.6)/2,0));
+    const prof=[[11.5,-11],[10.4,-9],[7.6,-4.5],[5.2,-1.5],[4.6,0],[5.2,2],[6.6,5.5],[8.2,10]].map(function(p){return new THREE.Vector2(p[0],p[1]);});
+    const duct=new THREE.Mesh(new THREE.LatheGeometry(prof,32),
+      new THREE.MeshStandardMaterial({color:0xe8b323,roughness:.5,metalness:.15,flatShading:true,side:THREE.DoubleSide,transparent:true,opacity:.6,depthWrite:false}));
+    duct.rotation.z=-Math.PI/2; duct.position.set(0,h,0); root.add(duct);
+    const ring=mk(new THREE.TorusGeometry(4.75,.35,8,28),M.dark,0,h,0); ring.rotation.y=Math.PI/2; root.add(ring);
+    root.add(cylX(.35,3.4,M.dark,.9,h,0,10));
+    const r=rotorHAT(3,4.3,.9,1.3,.6,M.blade); r.position.set(-.6,h,0);
+    root.add(r); rotors.push({o:r,axis:'x'});
+    hitR=11; hitH=26;
+  }
+  else if(id==='seagen'){
+    root.add(cylY(4.5,1.2,M.dark,0,.6,0,20));
+    root.add(cylY(1.5,44,M.steel,0,22,0,20));
+    root.add(mk(new THREE.BoxGeometry(5,3.2,5),M.orange,0,45.6,0));
+    root.add(mk(new THREE.BoxGeometry(2.4,1.6,36),M.yellow,0,m.hub,0));
+    [-14,14].forEach(z=>{
+      root.add(cylX(1.5,6,M.yellow,.3,m.hub,z));
+      const r=rotorHAT(2,10,1.4,2.2,.9,M.blade); r.position.set(-3.2,m.hub,z);
+      root.add(r); rotors.push({o:r,axis:'x'});
+    });
+    hitR=10; hitH=46;
+  }
+  else if(id==='hydroquest'){
+    root.add(mk(new THREE.BoxGeometry(13,2,26),M.conc,0,1,0));
+    root.add(mk(new THREE.BoxGeometry(2.4,2.4,24),M.steel,0,2.6,0));
+    const bgeo=new THREE.BoxGeometry(2.1,14,.55), sgeo=new THREE.BoxGeometry(4,.35,.35);
+    [-7.5,7.5].forEach(z=>{
+      const rot=new THREE.Group(); rot.position.set(0,m.hub+1,z);
+      rot.add(cylY(.55,16,M.dark,0,0,0,10));
+      for(let k=0;k<3;k++){
+        const a=k*2*Math.PI/3, bx=4*Math.cos(a), bz=4*Math.sin(a);
+        const b=new THREE.Mesh(bgeo,M.blade); b.position.set(bx,0,bz); b.rotation.y=-(a+Math.PI/2); rot.add(b);
+        [-6,6].forEach(y=>{
+          const s=new THREE.Mesh(sgeo,M.steel); s.position.set(bx/2,y,bz/2); s.rotation.y=-a; rot.add(s);
+        });
+      }
+      root.add(rot); rotors.push({o:rot,axis:'y'});
+    });
+    hitR=10; hitH=22;
+  }
+  else if(id==='hydrofoil'){
+    root.add(mk(new THREE.CylinderGeometry(6,7,2,20),M.conc,0,1,0));
+    const pile=cylY(1,44,M.steel,0,24,0,24); pile.scale.set(2.3,1,1.5); root.add(pile);
+    root.add(mk(new THREE.BoxGeometry(5,2.6,4),M.orange,0,47.3,0));
+    [-1,1].forEach(function(sg){root.add(mk(new THREE.BoxGeometry(2.4,15,.25),M.dark,0,m.hub,sg*1.52));});
+    const sh=new THREE.Shape(); sh.absellipse(0,0,2.8,.5,0,Math.PI*2,false,0);
+    const wg=new THREE.ExtrudeGeometry(sh,{depth:24,bevelEnabled:false,curveSegments:16}); wg.translate(0,0,-12);
+    const wing=new THREE.Mesh(wg,M.blade); wing.position.y=m.hub; root.add(wing);
+    let ph=0, ow=0;
+    tick=function(t,dt,v){
+      const target=v>=m.cutIn?.7+.5*v:0;
+      ow+=(target-ow)*Math.min(1,dt*1.5); ph+=ow*dt;
+      wing.position.y=m.hub+5.5*Math.sin(ph); wing.rotation.z=.5*Math.cos(ph);
+    };
+    tick(0,0,0);
+    hitR=8; hitH=46;
+  }
+  else if(id==='flumill'){
+    root.add(cylY(4.6,1.6,M.conc,0,.8,0,20));
+    root.add(cylY(.95,m.hub,M.steel,0,m.hub/2+.8,0,14));
+    const rot=new THREE.Group(); rot.position.set(0,m.hub+1.2,0);
+    rot.add(cylX(1.25,11,M.dark,0,0,0,14));
+    const nose=mk(new THREE.ConeGeometry(1.25,2.6,14),M.dark,-6.7,0,0); nose.rotation.z=Math.PI/2; rot.add(nose);
+    const L=11, turns=2.2, steps=56;
+    for(let f=0;f<2;f++){
+      const pos=[], idx=[];
+      for(let i=0;i<=steps;i++){
+        const s=i/steps, th=turns*2*Math.PI*s+f*Math.PI, x=L*(s-.5);
+        pos.push(x,1.25*Math.cos(th),1.25*Math.sin(th), x,4*Math.cos(th),4*Math.sin(th));
+        if(i<steps){const a=i*2; idx.push(a,a+1,a+2, a+1,a+3,a+2);}
+      }
+      const g=new THREE.BufferGeometry();
+      g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setIndex(idx); g.computeVertexNormals();
+      rot.add(new THREE.Mesh(g,M.blade));
+    }
+    root.add(rot); rotors.push({o:rot,axis:'x'});
+    hitR=6; hitH=m.hub+6;
+  }
+
+  const hit=mk(new THREE.CylinderGeometry(hitR,hitR,hitH,10),new THREE.MeshBasicMaterial({visible:false}),0,hitH/2,0);
+  root.add(hit);
+  return {root:root,rotors:rotors,tick:tick,m:m,hit:hit};
+}
+/*MODELS-END*/
+/*APP1-START*/
+const $=id=>document.getElementById(id);
+const nf=(v,d)=>v.toLocaleString('ca-ES',{minimumFractionDigits:d===undefined?1:d,maximumFractionDigits:d===undefined?1:d});
+const DEPTH=40, W=240, DD=150;
+const state={flow:2.4,dir:1,turbines:[],sel:null,nextId:1,showWake:true,
+  eval:{per:[],tot:{p0:0,p1:0,p2:0,p3:0,rated:0}}};
+const seaH=(x,z)=>-DEPTH+.9*Math.sin(x*.045+1)*Math.cos(z*.06)+.5*Math.sin(x*.11+z*.09);
+let renderer,scene,camera,controls,seabed,surf,surfBase,flow,selRing,markRing,edgeMat,glOK=false;
+const cv=$('gl'), vp=$('viewport');
+let msgTimer=0;
+function showMsg(t){const m=$('msg');m.textContent=t;m.classList.add('on');clearTimeout(msgTimer);msgTimer=setTimeout(()=>m.classList.remove('on'),2400);}
+function rng(seed){let a=seed;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function readStage(){
+  if(!glOK) return;
+  const c=css('--stage')||'#cfe3ea';
+  scene.background.set(c); scene.fog.color.set(c);
+  edgeMat.color.set(css('--ink-2')||'#4b6670');
+}
+
+/* Corriente: rayitas que se desplazan */
+const NP=1100; let fx,fy,fz,fs;
+function initFlow(){
+  const r=rng(7); fx=new Float32Array(NP); fy=new Float32Array(NP); fz=new Float32Array(NP); fs=new Float32Array(NP);
+  for(let i=0;i<NP;i++){
+    fx[i]=(r()-.5)*W; fy[i]=-DEPTH+2+r()*(DEPTH-3.5); fz[i]=(r()-.5)*DD;
+    fs[i]=.7+.5*((fy[i]+DEPTH)/DEPTH);
+  }
+  const g=new THREE.BufferGeometry();
+  const pa=new THREE.BufferAttribute(new Float32Array(NP*6),3); pa.setUsage(THREE.DynamicDrawUsage);
+  g.setAttribute('position',pa);
+  flow=new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xe4f7ff,transparent:true,opacity:.5,depthWrite:false}));
+  flow.frustumCulled=false; scene.add(flow);
+}
+function updateFlow(dt){
+  flow.visible=state.flow>.03;
+  if(!flow.visible) return;
+  const pa=flow.geometry.attributes.position, a=pa.array, sgn=state.dir, len=.8+state.flow*1.5, sp=state.flow*6*sgn;
+  for(let i=0;i<NP;i++){
+    let x=fx[i]+sp*fs[i]*dt;
+    if(x>W/2) x-=W; else if(x<-W/2) x+=W;
+    fx[i]=x;
+    const o=i*6;
+    a[o]=x; a[o+1]=fy[i]; a[o+2]=fz[i];
+    a[o+3]=x-sgn*len; a[o+4]=fy[i]; a[o+5]=fz[i];
+  }
+  pa.needsUpdate=true;
+}
+
+/* Escena */
+function initGL(){
+  renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+  renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0xcfe3ea); scene.fog=new THREE.Fog(0xcfe3ea,170,430);
+  camera=new THREE.PerspectiveCamera(45,1,1,900); camera.position.set(120,48,150);
+  controls=new THREE.OrbitControls(camera,cv);
+  controls.target.set(0,-26,0); controls.enableDamping=true; controls.dampingFactor=.08;
+  controls.minDistance=30; controls.maxDistance=330; controls.maxPolarAngle=Math.PI*.49;
+  scene.add(new THREE.HemisphereLight(0xdff2fa,0x2d4a55,.95));
+  scene.add(new THREE.AmbientLight(0xffffff,.25));
+  const sun=new THREE.DirectionalLight(0xffffff,.85); sun.position.set(70,140,50); scene.add(sun);
+
+  const g=new THREE.PlaneGeometry(W,DD,60,38); g.rotateX(-Math.PI/2);
+  const p=g.attributes.position, col=[], r=rng(3);
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i), z=p.getZ(i), y=seaH(x,z); p.setY(i,y);
+    const k=.9+.14*Math.sin(x*.21)*Math.cos(z*.17)+(r()-.5)*.05;
+    col.push(.78*k,.70*k,.52*k);
+  }
+  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3)); g.computeVertexNormals();
+  seabed=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0,flatShading:true}));
+  scene.add(seabed);
+  const rr=rng(11), rockM=new THREE.MeshStandardMaterial({color:0x7d8580,roughness:1,flatShading:true});
+  for(let i=0;i<26;i++){
+    const x=(rr()-.5)*(W-12), z=(rr()-.5)*(DD-12), s=.8+rr()*2.4;
+    const o=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),rockM);
+    o.position.set(x,seaH(x,z)+s*.3,z); o.rotation.set(rr()*3,rr()*3,rr()*3); o.scale.y=.6; scene.add(o);
+  }
+
+  const sg=new THREE.PlaneGeometry(W,DD,48,30); sg.rotateX(-Math.PI/2);
+  surfBase=new Float32Array(sg.attributes.position.count*2);
+  for(let i=0;i<sg.attributes.position.count;i++){surfBase[i*2]=sg.attributes.position.getX(i);surfBase[i*2+1]=sg.attributes.position.getZ(i);}
+  surf=new THREE.Mesh(sg,new THREE.MeshPhongMaterial({color:0x6cc4e6,transparent:true,opacity:.22,shininess:90,specular:0xffffff,side:THREE.DoubleSide,depthWrite:false}));
+  scene.add(surf);
+
+  edgeMat=new THREE.LineBasicMaterial({color:0x4b6670,transparent:true,opacity:.45});
+  const box=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W,DEPTH,DD)),edgeMat);
+  box.position.y=-DEPTH/2; scene.add(box);
+
+  selRing=new THREE.Mesh(new THREE.RingGeometry(10,11.2,48).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0xf3b73a,transparent:true,opacity:.95,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
+  selRing.renderOrder=5; selRing.visible=false; scene.add(selRing);
+  markRing=new THREE.Mesh(new THREE.RingGeometry(7,8.4,48).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:0x2f8a63,transparent:true,opacity:.95,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
+  markRing.renderOrder=5; markRing.visible=false; scene.add(markRing);
+
+  initFlow();
+  glOK=true; readStage(); resize();
+}
+function resize(){
+  if(!glOK) return;
+  const w=vp.clientWidth, h=vp.clientHeight;
+  if(!w||!h) return;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+
+/* Turbinas */
+function getSel(){return state.turbines.find(t=>t.id===state.sel)||null;}
+function setSel(id){
+  state.sel=id;
+  const t=getSel();
+  if(t){ selRing.visible=true; selRing.position.set(t.x,seaH(t.x,t.z)+1.2,t.z); selRing.scale.setScalar(Math.max(.6,t.m.wakeR/9)); }
+  else if(selRing) selRing.visible=false;
+  uiSelChanged();
+}
+function addTurbine(key,x,z,select){
+  const t={id:state.nextId++,key:key,m:MODEL_BY_ID[key],x:x,z:z,holder:new THREE.Group(),yaw:new THREE.Group(),
+    obj:buildTurbine(key),yawCur:state.dir>0?0:Math.PI,w:0};
+  t.holder.userData.tid=t.id;
+  t.holder.position.set(x,seaH(x,z),z);
+  t.yaw.rotation.y=t.yawCur;
+  t.holder.add(t.yaw); t.yaw.add(t.obj.root);
+  const R=t.m.wakeR, L=80, geo=new THREE.CylinderGeometry(R+KWAKE*L,R,L,24,1,true);
+  geo.rotateZ(-Math.PI/2); geo.translate(L/2+2,0,0);
+  t.wake=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x8fd8f2,transparent:true,opacity:.13,depthWrite:false,side:THREE.DoubleSide}));
+  t.wake.position.y=t.m.hub; t.wake.raycast=function(){}; t.wake.visible=state.showWake;
+  t.yaw.add(t.wake);
+  scene.add(t.holder);
+  state.turbines.push(t);
+  if(select) setSel(t.id); else uiListChanged();
+  return t;
+}
+function removeTurbine(t){
+  scene.remove(t.holder);
+  state.turbines=state.turbines.filter(o=>o!==t);
+  if(state.sel===t.id) setSel(null); else uiListChanged();
+}
+function moveTurbine(t,x,z){
+  t.x=x; t.z=z; t.holder.position.set(x,seaH(x,z),z);
+  if(state.sel===t.id) selRing.position.set(x,seaH(x,z)+1.2,z);
+}
+function clampXZ(x,z){return {x:Math.max(-BOUND.x,Math.min(BOUND.x,x)),z:Math.max(-BOUND.z,Math.min(BOUND.z,z))};}
+function placeModel(key,x,z){
+  if(state.turbines.length>=MAX_T){showMsg('Màxim '+MAX_T+' turbines. Treu-ne alguna per col·locar-ne una altra.');return false;}
+  const c=clampXZ(x,z);
+  if(tooClose(state.turbines,c.x,c.z,null)){showMsg('Massa a prop d’una altra turbina. Deixa almenys '+MIN_DIST+' m.');return false;}
+  addTurbine(key,c.x,c.z,true); return true;
+}
+function autoPlace(key){
+  if(state.turbines.length>=MAX_T){showMsg('Màxim '+MAX_T+' turbines. Treu-ne alguna per col·locar-ne una altra.');return;}
+  const s=findSlot(state.turbines);
+  if(!s){showMsg('No queda cap forat lliure al fons.');return;}
+  addTurbine(key,s.x,s.z,true);
+}
+
+/* Puntero sobre la escena */
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2();
+function setRay(cx,cy){
+  const r=cv.getBoundingClientRect();
+  ptr.set(((cx-r.left)/r.width)*2-1,-((cy-r.top)/r.height)*2+1);
+  ray.setFromCamera(ptr,camera);
+}
+function seabedPoint(cx,cy){setRay(cx,cy);const h=ray.intersectObject(seabed,false);return h.length?h[0].point:null;}
+function pickTurbine(cx,cy){
+  setRay(cx,cy);
+  const hits=ray.intersectObjects(state.turbines.map(t=>t.holder),true);
+  if(!hits.length) return null;
+  let o=hits[0].object;
+  while(o&&!(o.userData&&o.userData.tid)) o=o.parent;
+  return o?state.turbines.find(t=>t.id===o.userData.tid)||null:null;
+}
+let drag=null, click0=null, warnAt=0;
+function bindPointer(){
+  cv.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    const t=pickTurbine(e.clientX,e.clientY);
+    if(t){
+      controls.enabled=false;
+      drag={t:t,sx:e.clientX,sy:e.clientY,moved:false};
+      setSel(t.id);
+      try{cv.setPointerCapture(e.pointerId);}catch(err){}
+      cv.classList.add('grabbing'); e.preventDefault();
+    }else{ click0={x:e.clientX,y:e.clientY}; }
+  },{capture:true});
+  cv.addEventListener('pointermove',function(e){
+    if(!drag) return;
+    if(Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy)>4) drag.moved=true;
+    if(!drag.moved) return;
+    const p=seabedPoint(e.clientX,e.clientY);
+    if(!p) return;
+    const c=clampXZ(p.x,p.z);
+    if(tooClose(state.turbines,c.x,c.z,drag.t)){
+      if(performance.now()-warnAt>1500){showMsg('Massa a prop d’una altra turbina.');warnAt=performance.now();}
+    }else moveTurbine(drag.t,c.x,c.z);
+  });
+  const end=function(e){
+    if(drag){ controls.enabled=true; cv.classList.remove('grabbing'); try{cv.releasePointerCapture(e.pointerId);}catch(err){} drag=null; }
+    else if(click0&&e.type==='pointerup'&&Math.hypot(e.clientX-click0.x,e.clientY-click0.y)<5) setSel(null);
+    click0=null;
+  };
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',end);
+}
+
+/* Animación */
+function updateWorld(dt,time){
+  state.eval=evaluate(state.turbines,state.flow,state.dir);
+  const target=state.dir>0?0:Math.PI;
+  state.turbines.forEach(function(t,i){
+    const r=state.eval.per[i];
+    t.yawCur+=(target-t.yawCur)*Math.min(1,dt*2.5); t.yaw.rotation.y=t.yawCur;
+    const tw=r.state==='off'?0:Math.min(14,t.m.tsr*t.m.gain*r.v/(t.m.D/2));
+    t.w+=(tw-t.w)*Math.min(1,dt*1.5);
+    t.obj.rotors.forEach(function(ro){ro.o.rotation[ro.axis]+=t.w*dt;});
+    if(t.obj.tick) t.obj.tick(time,dt,r.v);
+  });
+  updateFlow(dt);
+  if(surf.visible){
+    const sp=surf.geometry.attributes.position;
+    for(let i=0;i<sp.count;i++){
+      const x=surfBase[i*2], z=surfBase[i*2+1];
+      sp.setY(i,.35*Math.sin(x*.07+time*.9)*Math.cos(z*.06+time*.7)+.18*Math.sin(x*.19-time*1.5+z*.1));
+    }
+    sp.needsUpdate=true; surf.geometry.computeVertexNormals();
+  }
+}
+const _v=new THREE.Vector3();
+function updateSelLabel(){
+  const el=$('selLabel'), t=getSel();
+  if(!t||!glOK){el.style.display='none';return;}
+  _v.set(t.x,seaH(t.x,t.z)+t.m.hub+t.m.D*.65,t.z).project(camera);
+  if(_v.z>1){el.style.display='none';return;}
+  const x=(_v.x*.5+.5)*vp.clientWidth, y=(-_v.y*.5+.5)*vp.clientHeight;
+  el.style.display='block'; el.style.left=x.toFixed(0)+'px'; el.style.top=y.toFixed(0)+'px';
+  const r=state.eval.per[state.turbines.indexOf(t)];
+  el.textContent=t.m.name+(r?' · '+fmtP(r.p3,nf):'');
+}
+/*APP1-END*/
+/*APP2-START*/
+function pv(w){const s=fmtP(w,nf), i=s.lastIndexOf(' ');return s.slice(0,i)+'<small>'+s.slice(i+1)+'</small>';}
+const STATE_TXT={run:'Generant',limited:'Al màxim (potència limitada)',off:'Aturada (corrent per sota de l’arrencada)'};
+
+/* Barra de turbinas */
+const dockEl=$('dock'), ghost=document.createElement('div');
+ghost.className='ghost'; ghost.innerHTML='<img alt="">'; document.body.appendChild(ghost);
+const thumbs={};
+function buildDock(){
+  MODELS.forEach(function(m){
+    const b=document.createElement('button');
+    b.type='button'; b.className='card'; b.setAttribute('role','listitem'); b.dataset.id=m.id;
+    b.setAttribute('aria-label','Afegeix '+m.name+' ('+m.dev+')');
+    b.innerHTML='<span class="th"><span>'+m.name+'</span></span><b>'+m.name+'</b><small>'+m.dev+' · '+m.fam+'</small><span class="kw">≈ '+fmtP(ratedGrid(m),nf)+'</span>';
+    b.title=m.info;
+    dockEl.appendChild(b); bindCard(b,m.id);
+  });
+}
+function setThumb(id,url){
+  thumbs[id]=url;
+  const card=dockEl.querySelector('[data-id="'+id+'"] .th');
+  if(card) card.innerHTML='<img alt="" src="'+url+'" draggable="false">';
+}
+function makeThumbs(){
+  try{
+    const r2=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});
+    r2.setPixelRatio(1); r2.setSize(240,180,false); r2.setClearColor(0x000000,0);
+    const sc=new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff,0x44606b,1.05));
+    const d=new THREE.DirectionalLight(0xffffff,.8); d.position.set(-40,80,60); sc.add(d);
+    const cam=new THREE.PerspectiveCamera(32,240/180,1,900);
+    MODELS.forEach(function(m){
+      const o=buildTurbine(m.id); o.root.remove(o.hit);
+      if(o.tick) o.tick(0,1.2,2.4);
+      sc.add(o.root);
+      const bb=new THREE.Box3().setFromObject(o.root), sp=new THREE.Sphere(); bb.getBoundingSphere(sp);
+      const dist=sp.radius/Math.sin(16*Math.PI/180)*1.06, dir=new THREE.Vector3(-.8,.28,.75).normalize();
+      cam.position.copy(sp.center).addScaledVector(dir,dist); cam.lookAt(sp.center);
+      r2.render(sc,cam); setThumb(m.id,r2.domElement.toDataURL('image/png')); sc.remove(o.root);
+    });
+    r2.dispose();
+    if(r2.forceContextLoss) r2.forceContextLoss();
+  }catch(err){ /* las tarjetas siguen mostrando el nombre */ }
+}
+let dd=null;
+function overCanvas(cx,cy){const r=cv.getBoundingClientRect();return cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom;}
+function bindCard(card,id){
+  card.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    dd={id:id,sx:e.clientX,sy:e.clientY,on:false,pid:e.pointerId};
+    try{card.setPointerCapture(e.pointerId);}catch(err){}
+  });
+  card.addEventListener('pointermove',function(e){
+    if(!dd||dd.pid!==e.pointerId) return;
+    if(!dd.on&&Math.hypot(e.clientX-dd.sx,e.clientY-dd.sy)>7){
+      dd.on=true; ghost.classList.add('on');
+      const im=ghost.querySelector('img'); if(thumbs[id]){im.src=thumbs[id];im.style.display='';}else im.style.display='none';
+    }
+    if(!dd.on) return;
+    ghost.style.transform='translate('+e.clientX+'px,'+e.clientY+'px)';
+    if(glOK&&overCanvas(e.clientX,e.clientY)){
+      const p=seabedPoint(e.clientX,e.clientY);
+      if(p){
+        const c=clampXZ(p.x,p.z), ok=!tooClose(state.turbines,c.x,c.z,null)&&state.turbines.length<MAX_T;
+        markRing.visible=true; markRing.position.set(c.x,seaH(c.x,c.z)+1.2,c.z);
+        markRing.material.color.set(ok?0x2f8a63:0xc9472f); return;
+      }
+    }
+    markRing.visible=false;
+  });
+  const finish=function(e){
+    if(!dd||dd.pid!==e.pointerId) return;
+    const was=dd; dd=null;
+    ghost.classList.remove('on'); markRing.visible=false;
+    try{card.releasePointerCapture(e.pointerId);}catch(err){}
+    if(e.type!=='pointerup') return;
+    if(was.on){
+      if(glOK&&overCanvas(e.clientX,e.clientY)){
+        const p=seabedPoint(e.clientX,e.clientY);
+        if(p) placeModel(id,p.x,p.z); else showMsg('Deixa la turbina sobre el fons marí.');
+      }
+    }else autoPlace(id);
+  };
+  card.addEventListener('pointerup',finish);
+  card.addEventListener('pointercancel',finish);
+  card.addEventListener('click',function(e){ if(e.detail===0) autoPlace(id); });
+}
+
+/* Lista y turbina elegida */
+let listSig='', listRefs=[];
+function uiListChanged(){ listSig=''; $('btnClear').disabled=!state.turbines.length; }
+function uiSelChanged(){ listSig=''; $('btnDel').disabled=!state.sel; selSig=''; }
+function updateList(){
+  const sig=state.turbines.map(t=>t.id).join(',')+'|'+state.sel;
+  const tl=$('tlist');
+  if(sig!==listSig){
+    listSig=sig; tl.innerHTML=''; listRefs=[];
+    state.turbines.forEach(function(t){
+      const li=document.createElement('li'), b=document.createElement('button');
+      b.type='button'; b.setAttribute('aria-pressed',String(t.id===state.sel));
+      b.innerHTML='<span class="n"></span><span class="p"></span><span class="b"><i></i></span>';
+      b.addEventListener('click',function(){setSel(t.id===state.sel?null:t.id);});
+      li.appendChild(b); tl.appendChild(li);
+      listRefs.push({t:t,n:b.querySelector('.n'),p:b.querySelector('.p'),i:b.querySelector('.b i')});
+    });
+    $('tEmpty').style.display=state.turbines.length?'none':'';
+  }
+  listRefs.forEach(function(ref,k){
+    const r=state.eval.per[k]; if(!r) return;
+    ref.n.textContent=ref.t.m.name+(r.def>.02?' · estela −'+nf(r.def*100,0)+' %':'');
+    ref.p.textContent=fmtP(r.p3,nf);
+    ref.i.style.width=Math.min(100,r.p3/Math.max(1,ratedGrid(ref.t.m))*100).toFixed(0)+'%';
+  });
+}
+let selSig='';
+function updateSelPanel(){
+  const t=getSel(), r=t?state.eval.per[state.turbines.indexOf(t)]:null, f=$('facts');
+  if(!t||!r){
+    if(selSig!=='none'){selSig='none'; f.innerHTML=''; $('selDesc').textContent='Prem una turbina a l’escena o a la llista per veure’n les dades. També pots arrossegar-la pel fons per moure-la.';}
+    drawCurve(null,0); return;
+  }
+  selSig='t'+t.id;
+  $('selDesc').textContent=t.m.name+' · '+t.m.dev+'. '+t.m.info;
+  f.innerHTML='<dt>Família</dt><dd>'+t.m.fam+'</dd>'+
+    '<dt>Velocitat al rotor</dt><dd>'+nf(r.v,2)+' m/s'+(r.def>.02?' (−'+nf(r.def*100,0)+' % per estela)':'')+'</dd>'+
+    '<dt>Potència a la xarxa</dt><dd>'+fmtP(r.p3,nf)+'</dd>'+
+    '<dt>Potència nominal</dt><dd>≈ '+fmtP(ratedGrid(t.m),nf)+'</dd>'+
+    '<dt>Estat</dt><dd>'+STATE_TXT[r.state]+'</dd>';
+  drawCurve(t.m,r.v);
+}
+function drawCurve(m,vNow){
+  const c=$('curve'), dpr=Math.min(2,window.devicePixelRatio||1), w=c.clientWidth, h=c.clientHeight;
+  if(!w||!h) return;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);}
+  const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+  const ink2=css('--ink-2'), line=css('--line'), amber=css('--amber'), aline=css('--amber-line'), ink=css('--ink');
+  g.font='11px "IBM Plex Mono",monospace'; g.textBaseline='middle';
+  if(!m){g.fillStyle=ink2;g.textAlign='center';g.fillText('Corba de potència: escull una turbina',w/2,h/2);return;}
+  const L=46,R=10,T=14,B=30,pw=w-L-R,ph=h-T-B, pmax=ratedGrid(m)*1.1;
+  const X=v=>L+v/VMAX*pw, Y=p=>T+ph-p/pmax*ph;
+  g.strokeStyle=line; g.lineWidth=1; g.fillStyle=ink2;
+  g.textAlign='center';
+  for(let v=0;v<=4;v++){const x=X(v);g.beginPath();g.moveTo(x,T);g.lineTo(x,T+ph);g.stroke();g.fillText(String(v),x,T+ph+12);}
+  g.fillText('Velocitat del corrent (m/s)',L+pw/2,h-6);
+  g.textAlign='right';
+  [0,.5,1].forEach(function(k){const y=Y(ratedGrid(m)*k);g.beginPath();g.moveTo(L,y);g.lineTo(w-R,y);g.stroke();
+    const s=fmtP(ratedGrid(m)*k,nf); g.fillText(k===0?'0':s.replace(/ (MW|kW|W)$/,''),L-6,y);});
+  g.textAlign='left'; g.fillText(ratedGrid(m)>=1e6?'MW':'kW',L,T-5);
+  g.beginPath(); for(let i=0;i<=90;i++){const v=VMAX*i/90, p=turbinePower(m,v).p3; i?g.lineTo(X(v),Y(p)):g.moveTo(X(v),Y(p));}
+  g.lineTo(X(VMAX),Y(0)); g.lineTo(X(0),Y(0)); g.closePath(); g.globalAlpha=.3; g.fillStyle=amber; g.fill(); g.globalAlpha=1;
+  g.strokeStyle=aline; g.lineWidth=2; g.beginPath();
+  for(let i=0;i<=90;i++){const v=VMAX*i/90, p=turbinePower(m,v).p3; i?g.lineTo(X(v),Y(p)):g.moveTo(X(v),Y(p));} g.stroke();
+  const vx=Math.min(VMAX,vNow), py=turbinePower(m,vx).p3;
+  g.strokeStyle=ink2; g.lineWidth=1; g.setLineDash([3,3]); g.beginPath(); g.moveTo(X(vx),T); g.lineTo(X(vx),T+ph); g.stroke(); g.setLineDash([]);
+  g.fillStyle=ink; g.beginPath(); g.arc(X(vx),Y(py),4,0,6.2832); g.fill();
+}
+
+/* Energía */
+const BAR=[].slice.call(document.querySelectorAll('#bars .col'));
+const SLICE=[].slice.call(document.querySelectorAll('#pie path'));
+const PV=[].slice.call(document.querySelectorAll('#pieLeg .pv'));
+let barMax=1e3;
+function arc(a0,a1){
+  const r=50,cx=60,cy=60,e=Math.min(a1,a0+6.28);
+  const x0=cx+r*Math.sin(a0),y0=cy-r*Math.cos(a0),x1=cx+r*Math.sin(e),y1=cy-r*Math.cos(e);
+  return 'M'+cx+' '+cy+' L'+x0.toFixed(2)+' '+y0.toFixed(2)+' A'+r+' '+r+' 0 '+(e-a0>Math.PI?1:0)+' 1 '+x1.toFixed(2)+' '+y1.toFixed(2)+'Z';
+}
+function renderEnergy(){
+  const T=state.eval.tot, loss=Math.max(0,T.p0-T.p3);
+  const need=niceMax(T.p0);
+  if(T.p0>barMax||T.p0<barMax*.3) barMax=need;
+  const unitMW=barMax>=1e6, div=unitMW?1e6:1e3, h=v=>Math.min(100,v/barMax*100).toFixed(1)+'%';
+  const num=v=>nf(v/div,unitMW?2:0);
+  [T.p0,T.p1,T.p2,T.p3,loss].forEach(function(v,i){
+    BAR[i].querySelector('i').style.height=h(v); BAR[i].querySelector('.num').textContent=num(v);
+  });
+  BAR[5].querySelector('.u').style.height=h(T.p3); BAR[5].querySelector('.l').style.height=h(loss);
+  BAR[5].querySelector('.num').textContent=num(T.p0);
+  $('barScale').textContent='Escala de les barres: de 0 a '+nf(barMax/div,0)+' '+(unitMW?'MW':'kW')+'. Xifres en '+(unitMW?'MW':'kW')+'.';
+  const parts=[T.p3,T.p0-T.p1,T.p1-T.p2,T.p2-T.p3];
+  let a=0;
+  parts.forEach(function(v,i){
+    const f=T.p0>1?Math.max(0,v)/T.p0:0;
+    SLICE[i].setAttribute('d',f>.0005?arc(a,a+f*2*Math.PI):'');
+    a+=f*2*Math.PI; PV[i].textContent=T.p0>1?nf(f*100,0)+' %':'—';
+  });
+}
+function updateUI(){
+  const T=state.eval.tot, n=state.turbines.length;
+  $('tagFlow').innerHTML='Corrent <b>'+nf(state.flow,1)+' m/s</b>';
+  $('tagDir').textContent='Sentit: '+(state.dir>0?'→':'←');
+  $('kP').innerHTML=pv(T.p3);
+  $('ovTotal').textContent='A la xarxa · '+fmtP(T.p3,nf);
+  $('kN').textContent=String(n);
+  $('kF').textContent=T.rated>0?nf(T.p3/T.rated*100,0)+' %':'—';
+  $('kH').textContent=T.p3>0?nf(T.p3/1000/HOME_KW,0):(n?'0':'—');
+  renderEnergy(); updateList(); updateSelPanel();
+}
+
+/* Controles */
+function setFlow(v){
+  state.flow=Math.max(0,Math.min(VMAX,v)); $('rFlow').value=state.flow;
+  $('oFlow').textContent=nf(state.flow,1)+' m/s · '+nf(state.flow*1.944,1)+' nusos';
+}
+function setMin(min){
+  const b=$('btnMin');
+  $('energy').classList.toggle('min',min); $('enBody').hidden=min;
+  b.setAttribute('aria-expanded',String(!min));
+  b.setAttribute('aria-label',min?'Mostra el panell d’energia':'Minimitza el panell d’energia');
+  b.querySelector('.t').textContent=min?'Mostra':'Minimitza';
+}
+function bindControls(){
+  $('btnMin').addEventListener('click',()=>setMin(!$('enBody').hidden));
+  setMin(window.innerWidth<700);
+  $('rFlow').addEventListener('input',e=>setFlow(+e.target.value));
+  document.querySelectorAll('[data-flow]').forEach(b=>b.addEventListener('click',()=>setFlow(+b.dataset.flow)));
+  $('btnFlip').addEventListener('click',()=>{state.dir=-state.dir;});
+  $('cSurf').addEventListener('change',e=>{if(glOK) surf.visible=e.target.checked;});
+  $('cWake').addEventListener('change',e=>{state.showWake=e.target.checked;state.turbines.forEach(t=>{t.wake.visible=state.showWake;});});
+  $('cBars').addEventListener('change',e=>{$('barsBox').hidden=!e.target.checked;});
+  $('cPie').addEventListener('change',e=>{$('pieBox').hidden=!e.target.checked;});
+  $('btnDel').addEventListener('click',()=>{const t=getSel();if(t) removeTurbine(t);});
+  $('btnClear').addEventListener('click',()=>{state.turbines.slice().forEach(removeTurbine);setSel(null);});
+  document.addEventListener('keydown',function(e){
+    if((e.key==='Delete'||e.key==='Backspace')&&state.sel){
+      const tg=(e.target&&e.target.tagName)||'';
+      if(tg==='INPUT'||tg==='TEXTAREA'||tg==='SELECT') return;
+      const t=getSel(); if(t){removeTurbine(t);e.preventDefault();}
+    }
+  });
+}
+
+/* Arranque */
+let last=performance.now(), frameN=0;
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  controls.update(); updateWorld(dt,now/1000);
+  renderer.render(scene,camera); updateSelLabel();
+  if(frameN++%3===0) updateUI();
+  requestAnimationFrame(loop);
+}
+function start(){
+  buildDock(); bindControls(); setFlow(2.4); $('btnClear').disabled=true; $('btnDel').disabled=true;
+  try{ initGL(); }catch(err){ glOK=false; $('err').classList.add('on'); }
+  if(!glOK){ updateUI(); return; }
+  bindPointer();
+  if(window.ResizeObserver) new ResizeObserver(resize).observe(vp); else window.addEventListener('resize',resize);
+  if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',readStage);
+  new MutationObserver(readStage).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  addTurbine('venturi',-70,-4,false);
+  addTurbine('venturi',-26,4,false);
+  addTurbine('seagen',30,-36,false);
+  addTurbine('hydroquest',-34,-48,false);
+  addTurbine('hydrofoil',58,32,false);
+  setSel(state.turbines[1].id);
+  makeThumbs();
+  requestAnimationFrame(loop);
+}
+start();
+document.documentElement.lang='ca';
+/*APP2-END*/
+</script>
+
+</body></html>
